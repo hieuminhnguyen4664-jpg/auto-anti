@@ -14,16 +14,16 @@ const DISPLAY_NAMES: Record<string, string> = {
 };
 
 const PATTERN_ICONS: Record<string, string> = {
-  'Run': '▶️',
-  'Allow': '✅',
-  'Always Allow': '🔓',
-  'Accept': '👍',
-  'Keep Waiting': '⏳',
-  'Retry': '🔄',
-  'Continue': '➡️',
-  'Allow Once': '🔑',
-  'Allow This Conversion': '🔀',
-  'Accept all': '📋'
+  'Run': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><polygon points="4,2 14,8 4,14" fill="#22c55e"/></svg>',
+  'Allow': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Always Allow': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L9.5 4.5 13 5.5 10.5 8 11 12 8 10.5 5 12 5.5 8 3 5.5 6.5 4.5Z" fill="#f59e0b"/></svg>',
+  'Accept': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1a7 7 0 100 14A7 7 0 008 1z" fill="#6366f1"/><path d="M5 8l2 2 4-4" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Keep Waiting': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#f59e0b" stroke-width="1.5" fill="none"/><path d="M8 4v4l3 2" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'Retry': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 0111.3-2.8M14 8a6 6 0 01-11.3 2.8" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round"/><path d="M13 2v3h-3M3 14v-3h3" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Continue': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Allow Once': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="2" stroke="#ec4899" stroke-width="1.5" fill="none"/><path d="M6 8h4" stroke="#ec4899" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  'Allow This Conversion': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 6l4-4 4 4M4 10l4 4 4-4" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'Accept all': '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l3 3 5-5" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 8l3 3 5-5" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 
 const PATTERN_DESCRIPTIONS: Record<string, string> = {

@@ -23,6 +23,7 @@
     "name": "Nemark Digital",
     "url": "https://shop.nemarkdigital.com"
   },
+  "icon": "icon.png",
   "homepage": "https://shop.nemarkdigital.com",
   "repository": {
     "type": "git",
