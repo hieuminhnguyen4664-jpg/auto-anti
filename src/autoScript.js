@@ -1,5 +1,5 @@
 // ===========================================================
-// AG Auto Click & Scroll v7.4 - Injected Script
+// AG Auto Click & Scroll v8.0 - Injected Script
 // Runs inside Antigravity/VS Code renderer process
 // Smart Accept — accepts in chat only, never in diff editor
 // ===========================================================
@@ -54,6 +54,9 @@
 
     // ---- Click Stats ----
     let clickStats = {};
+    let clickHistory = [];
+    let sessionStartTime = Date.now();
+    let userTypingUntil = 0;
 
     // ---- Helpers ----
 
@@ -161,10 +164,13 @@
     }
 
     /**
-     * Find and click matching approval buttons (Smart Accept v7.4)
+     * Find and click matching approval buttons (Smart Accept v8.0)
      */
     function autoClickButtons() {
         if (!CONFIG.acceptEnabled) return;
+
+        // Auto-pause: skip if user is actively typing
+        if (Date.now() < userTypingUntil) return;
 
         // Get all clickable elements
         const buttons = document.querySelectorAll(
@@ -217,12 +223,35 @@
                     if (!inNotif && !inChat) continue;
                 }
 
-                // Click!
-                btn.click();
+                // Smart delay + Click!
+                const delay = 30 + Math.random() * 90;
+                setTimeout(() => {
+                    btn.click();
+
+                    // Brief visual flash on clicked button
+                    try {
+                        const origBg = btn.style.backgroundColor;
+                        const origTransition = btn.style.transition;
+                        btn.style.transition = 'background-color 0.15s ease';
+                        btn.style.backgroundColor = 'rgba(99, 102, 241, 0.4)';
+                        setTimeout(() => {
+                            btn.style.backgroundColor = origBg;
+                            btn.style.transition = origTransition;
+                        }, 200);
+                    } catch (e) { }
+                }, delay);
 
                 // Track stats
                 if (!clickStats[pattern]) clickStats[pattern] = 0;
                 clickStats[pattern]++;
+
+                // Track click history for activity log
+                clickHistory.unshift({
+                    time: Date.now(),
+                    pattern: pattern,
+                    count: 1
+                });
+                if (clickHistory.length > 50) clickHistory = clickHistory.slice(0, 50);
 
                 sendStats();
                 break;
@@ -231,7 +260,7 @@
     }
 
     /**
-     * Auto-scroll the chat panel to bottom (jitter-free)
+     * Auto-scroll the chat panel to bottom (smooth)
      */
     function autoScroll() {
         if (!CONFIG.scrollEnabled) return;
@@ -252,7 +281,11 @@
                 if (inner.scrollHeight > inner.clientHeight) {
                     const distanceFromBottom = inner.scrollHeight - inner.scrollTop - inner.clientHeight;
                     if (distanceFromBottom > 50) {
-                        inner.scrollTop = inner.scrollHeight;
+                        // Smooth scroll instead of instant jump
+                        const target = inner.scrollHeight;
+                        const current = inner.scrollTop;
+                        const diff = target - current;
+                        inner.scrollTop = current + diff * 0.85;
                     }
                 }
             }
@@ -342,8 +375,16 @@
             pollSettings();
         }
 
-        console.log('[AG Auto Click & Scroll v7.4] Script loaded ✅');
+        console.log('[AG Auto Click & Scroll v8.0] Script loaded ✅');
     }
+
+    // Detect user typing to auto-pause clicks
+    document.addEventListener('keydown', function (e) {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT' || active.getAttribute('contenteditable'))) {
+            userTypingUntil = Date.now() + 2000; // Pause 2s after last keypress
+        }
+    }, true);
 
     // Wait for DOM ready
     if (document.readyState === 'loading') {

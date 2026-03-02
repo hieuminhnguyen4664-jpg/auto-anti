@@ -7,11 +7,11 @@ import { ChecksumFixer } from './checksumFixer';
 import { NativeDialogClicker } from './nativeDialog';
 
 // ============================================================
-// AG Auto Click & Scroll v7.4
+// AG Auto Click & Scroll v8.0
 // Entry point — Wires all modules together
 // ============================================================
 
-const EXTENSION_VERSION = '7.4.0';
+const EXTENSION_VERSION = '8.0.0';
 
 let statusBar: StatusBar;
 let settingsPanel: SettingsPanel;
@@ -151,7 +151,7 @@ function stopCommandsLoop(): void {
  * Activation — called when extension starts (onStartupFinished)
  */
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('[AG Auto Click & Scroll] Activating v7.4...');
+    console.log('[AG Auto Click & Scroll] Activating v8.0...');
 
     const config = vscode.workspace.getConfiguration('autoAccept');
 
@@ -201,6 +201,9 @@ export async function activate(context: vscode.ExtensionContext) {
         cfg.update('clickInterval', settings.clickInterval, vscode.ConfigurationTarget.Global);
         cfg.update('scrollInterval', settings.scrollInterval, vscode.ConfigurationTarget.Global);
         cfg.update('nativeDialogEnabled', settings.nativeDialogEnabled, vscode.ConfigurationTarget.Global);
+        if (settings.commandsApiEnabled !== undefined) {
+            cfg.update('commandsApiEnabled', settings.commandsApiEnabled, vscode.ConfigurationTarget.Global);
+        }
         if (settings.patterns) {
             cfg.update('patterns', settings.patterns, vscode.ConfigurationTarget.Global);
         }
@@ -276,6 +279,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     statusBar.onSettingsOpen(() => {
         settingsPanel.toggle();
+    });
+
+    // Toggle All callback (from unified status bar)
+    statusBar.onScrollToggle((enabled) => {
+        vscode.workspace.getConfiguration('autoAccept')
+            .update('scrollEnabled', enabled, vscode.ConfigurationTarget.Global);
+        syncSettingsToHttp();
     });
 
     // ==========================
@@ -393,7 +403,7 @@ export async function activate(context: vscode.ExtensionContext) {
         },
     });
 
-    console.log('[AG Auto Click & Scroll] Activated v7.4 ✅');
+    console.log('[AG Auto Click & Scroll] Activated v8.0 ✅');
 }
 
 /**

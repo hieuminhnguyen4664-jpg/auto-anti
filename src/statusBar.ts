@@ -1,116 +1,172 @@
 import * as vscode from 'vscode';
 
 /**
- * StatusBar — Quản lý 2 status bar items:
- * - "Accept ON/OFF" (xanh/đỏ) — toggle auto-click
- * - "Scroll ON/OFF" (xanh/đỏ) — toggle auto-scroll
+ * StatusBar v8.0 — Unified compact status bar with animated states
  *
- * Click vào status bar → toggle trạng thái + mở Settings panel.
+ * Single item: "⚡ AG: ON (42)" with color coding:
+ * - Green: All features active
+ * - Yellow: Partial (some features off)
+ * - Red: All disabled
  */
 export class StatusBar {
-    private acceptItem: vscode.StatusBarItem;
-    private scrollItem: vscode.StatusBarItem;
+    private mainItem: vscode.StatusBarItem;
+    private settingsItem: vscode.StatusBarItem;
 
     private acceptEnabled: boolean = true;
     private scrollEnabled: boolean = true;
     private clickCount: number = 0;
+    private isActive: boolean = false;
 
-    // Callbacks khi user toggle
+    // Callbacks
     private _onToggleAccept: ((enabled: boolean) => void) | null = null;
     private _onToggleScroll: ((enabled: boolean) => void) | null = null;
     private _onOpenSettings: (() => void) | null = null;
 
+    // Pulse animation
+    private pulseInterval: NodeJS.Timeout | null = null;
+    private pulseState: boolean = false;
+
     constructor() {
-        // ---- Accept Status Bar Item ----
-        this.acceptItem = vscode.window.createStatusBarItem(
+        // Main Status Item — Right side, high priority
+        this.mainItem = vscode.window.createStatusBarItem(
             vscode.StatusBarAlignment.Right,
-            200 // priority cao → hiện bên phải cùng
+            200
         );
-        this.acceptItem.command = 'autoAccept.toggleAccept';
-        this.renderAcceptItem();
-        this.acceptItem.show();
+        this.mainItem.command = 'autoAccept.toggleAccept';
+        this.render();
+        this.mainItem.show();
 
-        // ---- Scroll Status Bar Item ----
-        this.scrollItem = vscode.window.createStatusBarItem(
+        // Settings gear item
+        this.settingsItem = vscode.window.createStatusBarItem(
             vscode.StatusBarAlignment.Right,
-            199 // ngay cạnh Accept item
+            198
         );
-        this.scrollItem.command = 'autoAccept.toggleScroll';
-        this.renderScrollItem();
-        this.scrollItem.show();
+        this.settingsItem.command = 'autoAccept.openSettings';
+        this.settingsItem.text = '$(gear)';
+        this.settingsItem.tooltip = 'AG Auto Click — Open Settings Dashboard';
+        this.settingsItem.color = '#71717a';
+        this.settingsItem.show();
     }
 
     // ===========================
-    // Render UI
+    // Render
     // ===========================
 
-    private renderAcceptItem(): void {
-        if (this.acceptEnabled) {
-            this.acceptItem.text = `$(check) Accept ON`;
-            this.acceptItem.backgroundColor = undefined;
-            this.acceptItem.color = '#4EC9B0'; // xanh lá
-            this.acceptItem.tooltip = 'Auto Accept đang BẬT — Click để tắt / mở Settings';
+    private render(): void {
+        const allOn = this.acceptEnabled && this.scrollEnabled;
+        const allOff = !this.acceptEnabled && !this.scrollEnabled;
+
+        // Icon + state text
+        let icon: string;
+        let stateText: string;
+        let color: string;
+
+        if (allOn) {
+            icon = '$(zap)';
+            stateText = 'ON';
+            color = '#22c55e'; // green
+        } else if (allOff) {
+            icon = '$(circle-slash)';
+            stateText = 'OFF';
+            color = '#ef4444'; // red
         } else {
-            this.acceptItem.text = `$(x) Accept OFF`;
-            this.acceptItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-            this.acceptItem.color = undefined; // mặc định (đỏ từ errorBackground)
-            this.acceptItem.tooltip = 'Auto Accept đang TẮT — Click để bật / mở Settings';
+            icon = '$(warning)';
+            stateText = this.acceptEnabled ? 'A·ON' : 'S·ON';
+            color = '#f59e0b'; // yellow
         }
 
-        // Badge hiển thị tổng số click
+        // Build text
+        let text = `${icon} AG: ${stateText}`;
         if (this.clickCount > 0) {
-            this.acceptItem.text += ` (${this.clickCount})`;
+            text += ` (${this.formatCount(this.clickCount)})`;
+        }
+
+        this.mainItem.text = text;
+        this.mainItem.color = color;
+
+        // Tooltip
+        const acceptState = this.acceptEnabled ? '✅ ON' : '❌ OFF';
+        const scrollState = this.scrollEnabled ? '✅ ON' : '❌ OFF';
+        this.mainItem.tooltip = new vscode.MarkdownString(
+            `**⚡ AG Auto Click & Scroll v8.0**\n\n` +
+            `| Feature | Status |\n|---|---|\n` +
+            `| Auto Accept | ${acceptState} |\n` +
+            `| Auto Scroll | ${scrollState} |\n` +
+            `| Total Clicks | ${this.clickCount} |\n\n` +
+            `_Click to toggle Accept · $(gear) for Settings_`
+        );
+        this.mainItem.tooltip.isTrusted = true;
+
+        // Background color for OFF states
+        if (allOff) {
+            this.mainItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+        } else {
+            this.mainItem.backgroundColor = undefined;
         }
     }
 
-    private renderScrollItem(): void {
-        if (this.scrollEnabled) {
-            this.scrollItem.text = `$(arrow-down) Scroll ON`;
-            this.scrollItem.backgroundColor = undefined;
-            this.scrollItem.color = '#4EC9B0';
-            this.scrollItem.tooltip = 'Auto Scroll đang BẬT — Click để tắt';
-        } else {
-            this.scrollItem.text = `$(arrow-down) Scroll OFF`;
-            this.scrollItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-            this.scrollItem.color = undefined;
-            this.scrollItem.tooltip = 'Auto Scroll đang TẮT — Click để bật';
+    private formatCount(n: number): string {
+        if (n >= 1000) {
+            return (n / 1000).toFixed(1) + 'k';
         }
+        return n.toString();
+    }
+
+    // ===========================
+    // Pulse Animation (when actively clicking)
+    // ===========================
+
+    startPulse(): void {
+        if (this.pulseInterval) return;
+        this.pulseInterval = setInterval(() => {
+            this.pulseState = !this.pulseState;
+            // Subtle color pulse
+            if (this.acceptEnabled) {
+                this.mainItem.color = this.pulseState ? '#4ade80' : '#22c55e';
+            }
+        }, 800);
+    }
+
+    stopPulse(): void {
+        if (this.pulseInterval) {
+            clearInterval(this.pulseInterval);
+            this.pulseInterval = null;
+        }
+        this.render(); // Reset color
     }
 
     // ===========================
     // Register Commands
     // ===========================
 
-    /**
-     * Đăng ký commands toggle vào extension context.
-     * Phải gọi hàm này trong activate() của extension.
-     */
     registerCommands(context: vscode.ExtensionContext): void {
         context.subscriptions.push(
-            // --- Toggle Accept ---
             vscode.commands.registerCommand('autoAccept.toggleAccept', () => {
                 this.acceptEnabled = !this.acceptEnabled;
-                this.renderAcceptItem();
-
-                // Notify extension logic
+                this.render();
                 if (this._onToggleAccept) {
                     this._onToggleAccept(this.acceptEnabled);
                 }
-
-                // Mở settings panel khi click lần đầu
-                if (this._onOpenSettings) {
-                    this._onOpenSettings();
-                }
             }),
 
-            // --- Toggle Scroll ---
             vscode.commands.registerCommand('autoAccept.toggleScroll', () => {
                 this.scrollEnabled = !this.scrollEnabled;
-                this.renderScrollItem();
-
+                this.render();
                 if (this._onToggleScroll) {
                     this._onToggleScroll(this.scrollEnabled);
                 }
+            }),
+
+            vscode.commands.registerCommand('autoAccept.toggleAll', () => {
+                const newState = !this.acceptEnabled || !this.scrollEnabled;
+                this.acceptEnabled = newState;
+                this.scrollEnabled = newState;
+                this.render();
+                if (this._onToggleAccept) this._onToggleAccept(this.acceptEnabled);
+                if (this._onToggleScroll) this._onToggleScroll(this.scrollEnabled);
+
+                const state = newState ? 'ON' : 'OFF';
+                vscode.window.showInformationMessage(`AG Auto: All features ${state}`);
             })
         );
     }
@@ -135,21 +191,26 @@ export class StatusBar {
     // Public setters
     // ===========================
 
-    /** Đồng bộ state từ config */
     setAcceptEnabled(enabled: boolean): void {
         this.acceptEnabled = enabled;
-        this.renderAcceptItem();
+        this.render();
     }
 
     setScrollEnabled(enabled: boolean): void {
         this.scrollEnabled = enabled;
-        this.renderScrollItem();
+        this.render();
     }
 
-    /** Cập nhật badge click count trên Accept item */
     setClickCount(count: number): void {
+        const oldCount = this.clickCount;
         this.clickCount = count;
-        this.renderAcceptItem();
+        this.render();
+
+        // Start pulse when click count changes
+        if (count > oldCount) {
+            this.startPulse();
+            setTimeout(() => this.stopPulse(), 3000);
+        }
     }
 
     // ===========================
@@ -169,7 +230,10 @@ export class StatusBar {
     // ===========================
 
     dispose(): void {
-        this.acceptItem.dispose();
-        this.scrollItem.dispose();
+        this.mainItem.dispose();
+        this.settingsItem.dispose();
+        if (this.pulseInterval) {
+            clearInterval(this.pulseInterval);
+        }
     }
 }
