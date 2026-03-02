@@ -1444,7 +1444,7 @@ export class SettingsPanel {
 
   // ===== STATS =====
   const displayNames = ${JSON.stringify(DISPLAY_NAMES)};
-  const patternIcons = ${JSON.stringify(PATTERN_ICONS)};
+  const patternIcons = ${JSON.stringify(PATTERN_ICONS).replace(/<\//g, '<\\/')};
 
   function updateStats(stats) {
     const container = document.getElementById('statsContainer');
