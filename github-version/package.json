@@ -1,0 +1,133 @@
+{
+    "name": "antigravity-auto-accept",
+    "displayName": "Antigravity Auto Accept & Retry",
+    "description": "⚡ Tự động Accept commands & Retry khi lỗi trong Antigravity IDE — by Nemark Digital",
+    "version": "0.3.0",
+    "publisher": "ducvps12",
+    "author": {
+        "name": "Nemark Digital",
+        "url": "https://shop.nemarkdigital.com"
+    },
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "antigravity",
+        "auto-accept",
+        "auto-retry",
+        "automation",
+        "nemark"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "agAutoAccept.toggle",
+                "title": "Auto Accept: Toggle ON/OFF",
+                "icon": "$(zap)"
+            },
+            {
+                "command": "agAutoAccept.start",
+                "title": "Auto Accept: Start"
+            },
+            {
+                "command": "agAutoAccept.stop",
+                "title": "Auto Accept: Stop"
+            },
+            {
+                "command": "agAutoAccept.showWelcome",
+                "title": "Auto Accept: Show Welcome & Guide"
+            },
+            {
+                "command": "agAutoAccept.showLog",
+                "title": "Auto Accept: Show Log"
+            }
+        ],
+        "configuration": {
+            "title": "Antigravity Auto Accept",
+            "properties": {
+                "agAutoAccept.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Auto-start when IDE opens"
+                },
+                "agAutoAccept.autoRetry": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Auto-click Retry buttons on failed commands"
+                },
+                "agAutoAccept.scanInterval": {
+                    "type": "number",
+                    "default": 2000,
+                    "minimum": 500,
+                    "maximum": 10000,
+                    "description": "Scan interval in milliseconds (default: 2000ms)"
+                },
+                "agAutoAccept.statusBarPosition": {
+                    "type": "string",
+                    "default": "right",
+                    "enum": [
+                        "left",
+                        "right"
+                    ],
+                    "description": "Status bar button position"
+                }
+            }
+        },
+        "keybindings": [
+            {
+                "command": "agAutoAccept.toggle",
+                "key": "ctrl+alt+shift+a",
+                "mac": "cmd+alt+shift+a"
+            }
+        ],
+        "walkthroughs": [
+            {
+                "id": "agAutoAccept.welcome",
+                "title": "Antigravity Auto Accept & Retry",
+                "description": "Hướng dẫn sử dụng Auto Accept & Retry — by shop.nemarkdigital.com",
+                "steps": [
+                    {
+                        "id": "agAutoAccept.welcome.intro",
+                        "title": "Chào mừng! 👋",
+                        "description": "**Antigravity Auto Accept & Retry** tự động Accept command và Retry khi lỗi.\n\nPhát triển bởi **Nemark Digital** — [shop.nemarkdigital.com](https://shop.nemarkdigital.com)\n\n💎 Mua account ultra tại shop để có trải nghiệm tốt nhất!",
+                        "media": {
+                            "markdown": "welcome.md"
+                        }
+                    },
+                    {
+                        "id": "agAutoAccept.welcome.toggle",
+                        "title": "Bật/Tắt nhanh",
+                        "description": "Click nút **⚡ Auto-Accept: ON** ở góc phải dưới status bar để bật/tắt nhanh.\n\nHoặc dùng Command Palette: `Ctrl+Shift+P` → `Auto Accept: Toggle ON/OFF`",
+                        "media": {
+                            "markdown": "guide-toggle.md"
+                        }
+                    },
+                    {
+                        "id": "agAutoAccept.welcome.settings",
+                        "title": "Cấu hình",
+                        "description": "Vào Settings (`Ctrl+,`) → tìm `Auto Accept` để tùy chỉnh:\n- Bật/tắt auto-start\n- Bật/tắt auto-retry\n- Thời gian scan (mặc định 2 giây)\n- Vị trí nút status bar",
+                        "media": {
+                            "markdown": "guide-settings.md"
+                        }
+                    }
+                ]
+            }
+        ]
+    },
+    "icon": "icons/icon128.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ducvps12/auto-accept"
+    },
+    "homepage": "https://shop.nemarkdigital.com",
+    "bugs": {
+        "url": "https://github.com/ducvps12/auto-accept/issues"
+    }
+}
