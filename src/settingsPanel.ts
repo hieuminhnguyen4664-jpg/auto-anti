@@ -44,10 +44,13 @@ export class SettingsPanel {
   private context: vscode.ExtensionContext;
   private onSettingsChange: ((settings: any) => void) | null = null;
   private onStatsReset: (() => void) | null = null;
+  private onProxyAction: ((action: string, data?: any) => void) | null = null;
   private currentStats: Record<string, number> = {};
   private statsUpdateInterval: NodeJS.Timeout | null = null;
   private activityLog: Array<{ time: string; pattern: string; count: number }> = [];
   private sessionStart: number = Date.now();
+  private proxyStatus: any = { running: false, port: 8045, totalRequests: 0, accountsActive: 0, accountsLimited: 0 };
+  private proxyApiKey: string = '';
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -107,6 +110,18 @@ export class SettingsPanel {
           break;
         case 'openShop':
           vscode.env.openExternal(vscode.Uri.parse('https://shop.nemarkdigital.com'));
+          break;
+        case 'proxyStart':
+        case 'proxyStop':
+        case 'proxySaveConfig':
+        case 'proxyRegenKey':
+          if (this.onProxyAction) {
+            this.onProxyAction(msg.type, msg.data);
+          }
+          break;
+        case 'copyToClipboard':
+          vscode.env.clipboard.writeText(msg.text);
+          vscode.window.showInformationMessage('Copied to clipboard!');
           break;
       }
     });
@@ -242,6 +257,21 @@ export class SettingsPanel {
 
   onReset(cb: () => void): void {
     this.onStatsReset = cb;
+  }
+
+  onProxy(cb: (action: string, data?: any) => void): void {
+    this.onProxyAction = cb;
+  }
+
+  updateProxyStatus(status: any, apiKey?: string): void {
+    this.proxyStatus = status;
+    if (apiKey) this.proxyApiKey = apiKey;
+    if (!this.panel) return;
+    this.panel.webview.postMessage({
+      type: 'proxyStatus',
+      status: this.proxyStatus,
+      apiKey: this.proxyApiKey,
+    });
   }
 
   isVisible(): boolean {
@@ -743,50 +773,91 @@ export class SettingsPanel {
   .presets-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 8px;
+    gap: 12px;
+    margin-top: 12px;
   }
 
   .preset-btn {
-    background: var(--bg-secondary);
+    background: linear-gradient(145deg, var(--bg-secondary), rgba(255,255,255,0.02));
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 8px;
+    border-radius: 14px;
+    padding: 18px 10px 14px;
     cursor: pointer;
     text-align: center;
-    transition: all 0.25s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: var(--text);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .preset-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: transparent;
+    transition: background 0.3s;
   }
 
   .preset-btn:hover {
     border-color: var(--accent);
     background: rgba(99, 102, 241, 0.08);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  }
+
+  .preset-btn:hover::before {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
   }
 
   .preset-btn.active {
     border-color: var(--accent);
-    background: rgba(99, 102, 241, 0.12);
-    box-shadow: 0 0 16px var(--accent-glow);
+    background: rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 24px var(--accent-glow), 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  .preset-btn.active::before {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
   }
 
   .preset-icon {
-    font-size: 20px;
-    display: block;
-    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 8px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+
+  .preset-btn:hover .preset-icon {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: var(--accent);
+    transform: scale(1.1);
+  }
+
+  .preset-btn.active .preset-icon {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
   }
 
   .preset-name {
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
   }
 
   .preset-value {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
-    margin-top: 2px;
+    margin-top: 4px;
+    font-family: 'SF Mono', monospace;
+    font-weight: 600;
   }
 
   /* ===== PATTERN CARDS ===== */
@@ -1084,6 +1155,137 @@ export class SettingsPanel {
     font-size: 10px;
     font-weight: 600;
   }
+
+  /* ===== PROXY TAB ===== */
+  .proxy-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .proxy-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .proxy-status-text {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .proxy-input {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: 'SF Mono', monospace;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .proxy-input:focus {
+    border-color: var(--accent);
+  }
+
+  .proxy-select {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .proxy-select:focus {
+    border-color: var(--accent);
+  }
+
+  .proxy-key-display {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: 'SF Mono', monospace;
+    color: var(--accent);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .proxy-endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .proxy-endpoint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  .proxy-endpoint code {
+    color: var(--accent);
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+  }
+
+  .proxy-protocol {
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 65px;
+    text-align: center;
+  }
+
+  .proxy-code-block {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .proxy-code-label {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .proxy-code {
+    padding: 12px 14px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+  }
+
+  .proxy-port-val, .proxy-key-val {
+    color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -1093,7 +1295,7 @@ export class SettingsPanel {
     <div class="header-content">
       <div class="header-top">
         <div class="logo-area">
-          <div class="logo-icon">⚡</div>
+          <div class="logo-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
           <span class="logo-text">AG Auto Click & Scroll</span>
         </div>
         <span class="version-badge">v8.0</span>
@@ -1118,17 +1320,18 @@ export class SettingsPanel {
 
   <!-- ===== TABS ===== -->
   <div class="tabs">
-    <div class="tab active" data-tab="dashboard"><span class="tab-icon">📊</span> Dashboard</div>
-    <div class="tab" data-tab="settings"><span class="tab-icon">⚙️</span> Settings</div>
-    <div class="tab" data-tab="patterns"><span class="tab-icon">🎯</span> Patterns</div>
-    <div class="tab" data-tab="activity"><span class="tab-icon">📋</span> Activity</div>
+    <div class="tab active" data-tab="dashboard"><span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span> Dashboard</div>
+    <div class="tab" data-tab="settings"><span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></span> Settings</div>
+    <div class="tab" data-tab="patterns"><span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Patterns</div>
+    <div class="tab" data-tab="activity"><span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> Activity</div>
+    <div class="tab" data-tab="proxy"><span class="tab-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg></span> Proxy</div>
   </div>
 
   <!-- ===== DASHBOARD TAB ===== -->
   <div class="tab-content active" id="tab-dashboard">
     <!-- Status Grid -->
     <div class="card">
-      <div class="card-title"><span class="icon">📡</span> Live Status</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Live Status</div>
       <div class="status-grid">
         <div class="status-item ${acceptEnabled ? 'on' : 'off'}" id="statusAccept">
           <div><span class="status-dot ${acceptEnabled ? 'on' : 'off'}" id="dotAccept"></span><span class="status-label">Accept</span></div>
@@ -1147,17 +1350,17 @@ export class SettingsPanel {
 
     <!-- Click Stats -->
     <div class="card">
-      <div class="card-title"><span class="icon">📈</span> Click Statistics</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span> Click Statistics</div>
       <div id="statsContainer">
         <div class="log-empty">
-          <div class="log-empty-icon">📊</div>
+          <div class="log-empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
           <div>No clicks recorded yet</div>
           <div style="font-size: 12px; margin-top: 4px;">Stats will appear as buttons are clicked</div>
         </div>
       </div>
       <div class="btn-group">
-        <button class="btn btn-danger" id="resetStatsBtn">🗑️ Reset Stats</button>
-        <button class="btn btn-ghost" id="exportBtn">📤 Export</button>
+        <button class="btn btn-danger" id="resetStatsBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg> Reset Stats</button>
+        <button class="btn btn-ghost" id="exportBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export</button>
       </div>
     </div>
   </div>
@@ -1166,7 +1369,7 @@ export class SettingsPanel {
   <div class="tab-content" id="tab-settings">
     <!-- Main Controls -->
     <div class="card">
-      <div class="card-title"><span class="icon">🎛️</span> Controls</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg></span> Controls</div>
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-name">Auto Accept</div>
@@ -1211,25 +1414,25 @@ export class SettingsPanel {
 
     <!-- Speed Presets -->
     <div class="card">
-      <div class="card-title"><span class="icon">🚀</span> Speed Profiles</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span> Speed Profiles</div>
       <div class="presets-row">
         <div class="preset-btn" data-preset="turbo">
-          <span class="preset-icon">🔥</span>
+          <span class="preset-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
           <div class="preset-name">Turbo</div>
           <div class="preset-value">200ms</div>
         </div>
         <div class="preset-btn" data-preset="fast">
-          <span class="preset-icon">⚡</span>
+          <span class="preset-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
           <div class="preset-name">Fast</div>
           <div class="preset-value">500ms</div>
         </div>
         <div class="preset-btn ${clickInterval === 1000 ? 'active' : ''}" data-preset="balanced">
-          <span class="preset-icon">🎯</span>
+          <span class="preset-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
           <div class="preset-name">Balanced</div>
           <div class="preset-value">1000ms</div>
         </div>
         <div class="preset-btn" data-preset="careful">
-          <span class="preset-icon">🛡️</span>
+          <span class="preset-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
           <div class="preset-name">Careful</div>
           <div class="preset-value">3000ms</div>
         </div>
@@ -1238,7 +1441,7 @@ export class SettingsPanel {
 
     <!-- Speed Sliders -->
     <div class="card">
-      <div class="card-title"><span class="icon">⏱️</span> Fine Tuning</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> Fine Tuning</div>
       <div class="slider-row">
         <div class="slider-header">
           <span class="slider-name">Click Interval</span>
@@ -1257,18 +1460,18 @@ export class SettingsPanel {
 
     <!-- Actions -->
     <div class="btn-group">
-      <button class="btn btn-primary" id="saveBtn">💾 Save & Apply</button>
-      <button class="btn btn-warning" id="reloadBtn">🔄 Reload Window</button>
+      <button class="btn btn-primary" id="saveBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save & Apply</button>
+      <button class="btn btn-warning" id="reloadBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Reload Window</button>
     </div>
   </div>
 
   <!-- ===== PATTERNS TAB ===== -->
   <div class="tab-content" id="tab-patterns">
     <div class="patterns-toolbar">
-      <div class="card-title" style="margin: 0;"><span class="icon">🎯</span> Button Patterns</div>
+      <div class="card-title" style="margin: 0;"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Button Patterns</div>
       <div class="patterns-actions">
-        <button class="btn-sm" id="enableAllBtn">✅ Enable All</button>
-        <button class="btn-sm" id="disableAllBtn">❌ Disable All</button>
+        <button class="btn-sm" id="enableAllBtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Enable All</button>
+        <button class="btn-sm" id="disableAllBtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Disable All</button>
       </div>
     </div>
     <div class="patterns-grid">
@@ -1279,10 +1482,10 @@ export class SettingsPanel {
   <!-- ===== ACTIVITY LOG TAB ===== -->
   <div class="tab-content" id="tab-activity">
     <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Recent Activity</div>
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> Recent Activity</div>
       <div class="log-container" id="logContainer">
         <div class="log-empty">
-          <div class="log-empty-icon">⏳</div>
+          <div class="log-empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
           <div>No activity yet</div>
           <div style="font-size: 12px; margin-top: 4px;">Click events will appear here in real-time</div>
         </div>
@@ -1290,11 +1493,133 @@ export class SettingsPanel {
     </div>
   </div>
 
+  <!-- ===== PROXY TAB ===== -->
+  <div class="tab-content" id="tab-proxy">
+    <!-- Service Status -->
+    <div class="card">
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg></span> Proxy Service</div>
+      <div class="proxy-status-bar" id="proxyStatusBar">
+        <div class="proxy-status-indicator">
+          <span class="status-dot off" id="proxyDot"></span>
+          <span class="proxy-status-text" id="proxyStatusText">Stopped</span>
+        </div>
+        <button class="btn btn-primary" id="proxyToggleBtn" style="padding: 8px 16px;">Start</button>
+      </div>
+      <div class="proxy-info-grid" style="margin-top: 14px;">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Port</div>
+            <div class="setting-desc">TCP port for local proxy (restart to apply)</div>
+          </div>
+          <input type="number" id="proxyPort" value="8045" min="1024" max="65535" class="proxy-input" style="width:80px">
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Request Timeout</div>
+            <div class="setting-desc">Max seconds to wait for upstream (30-7200)</div>
+          </div>
+          <input type="number" id="proxyTimeout" value="120" min="30" max="7200" class="proxy-input" style="width:80px">
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Allow LAN</div>
+            <div class="setting-desc">Bind to 0.0.0.0 for network access</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="proxyLan">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-name">Auto-start</div>
+            <div class="setting-desc">Start proxy when extension activates</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="proxyAutoStart">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth -->
+    <div class="card">
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span> Authentication</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">API Key</div>
+          <div class="setting-desc">Shared secret for client authentication</div>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <code class="proxy-key-display" id="proxyKeyDisplay">-</code>
+          <button class="btn-sm" id="copyKeyBtn" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+          <button class="btn-sm" id="regenKeyBtn" title="Regenerate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Auth Mode</div>
+          <div class="setting-desc">Auto = off for localhost, on for LAN</div>
+        </div>
+        <select id="proxyAuthMode" class="proxy-select">
+          <option value="auto">Auto</option>
+          <option value="all">All requests</option>
+          <option value="allExceptHealth">All except /healthz</option>
+          <option value="off">Disabled</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Endpoints -->
+    <div class="card">
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></span> Endpoints</div>
+      <div class="proxy-endpoint-list">
+        <div class="proxy-endpoint"><span class="proxy-protocol">OpenAI</span><code>/v1/chat/completions</code></div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">OpenAI</span><code>/v1/completions</code></div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">OpenAI</span><code>/v1/responses</code> (Codex)</div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">Anthropic</span><code>/v1/messages</code></div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">Gemini</span><code>/v1beta/models/...</code></div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">Models</span><code>/v1/models</code></div>
+        <div class="proxy-endpoint"><span class="proxy-protocol">Health</span><code>/healthz</code></div>
+      </div>
+    </div>
+
+    <!-- Quick Integration -->
+    <div class="card">
+      <div class="card-title"><span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span> Quick Integration</div>
+      <div class="proxy-code-block">
+        <div class="proxy-code-label">Python (OpenAI SDK)</div>
+        <pre class="proxy-code" id="pythonSnippet">from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:<span class="proxy-port-val">8045</span>/v1",
+    api_key="<span class="proxy-key-val">-</span>"
+)
+
+response = client.chat.completions.create(
+    model="gemini-2.5-flash",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+print(response.choices[0].message.content)</pre>
+      </div>
+      <div class="proxy-code-block" style="margin-top: 10px;">
+        <div class="proxy-code-label">Cursor / VS Code — settings.json</div>
+        <pre class="proxy-code">{"openai.baseUrl": "http://127.0.0.1:<span class="proxy-port-val">8045</span>/v1",
+ "openai.apiKey": "<span class="proxy-key-val">-</span>"}</pre>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-primary" id="proxySaveBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Proxy Config</button>
+    </div>
+  </div>
+
   <!-- ===== FOOTER ===== -->
   <div class="footer">
     <div class="footer-left">
       <div class="footer-brand">
-        Powered by <a href="#" id="shopLink">Nemark Digital</a> · v8.0
+        Powered by <a href="#" id="shopLink">Nemark Digital</a> · v9.0
       </div>
     </div>
     <div class="footer-shortcuts">
@@ -1465,7 +1790,7 @@ export class SettingsPanel {
     }
 
     if (entries.length === 0) {
-      container.innerHTML = '<div class="log-empty"><div class="log-empty-icon">📊</div><div>No clicks recorded yet</div></div>';
+      container.innerHTML = '<div class="log-empty"><div class="log-empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div>No clicks recorded yet</div></div>';
       return;
     }
 
@@ -1476,10 +1801,10 @@ export class SettingsPanel {
     entries.forEach(([pattern, count], idx) => {
       const pct = (count / maxCount) * 100;
       const name = displayNames[pattern] || pattern;
-      const icon = patternIcons[pattern] || '🔘';
+      const icon = patternIcons[pattern] || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
       const isCrown = idx === 0;
       html += '<div class="stat-row">';
-      html += '<span class="stat-name">' + (isCrown ? '<span class="crown-badge">👑</span> ' : icon + ' ') + name + '</span>';
+      html += '<span class="stat-name">' + (isCrown ? '<span class="crown-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5"><path d="M2 4l3 12h14l3-12-6 7-4-9-4 9-6-7z"/><rect x="4" y="18" width="16" height="2" rx="1"/></svg></span> ' : icon + ' ') + name + '</span>';
       html += '<div class="stat-bar-track"><div class="stat-bar-fill" style="width:' + pct + '%"></div></div>';
       html += '<span class="stat-count">' + count + '</span>';
       html += '</div>';
@@ -1491,13 +1816,13 @@ export class SettingsPanel {
   function updateActivityLog(log) {
     const container = document.getElementById('logContainer');
     if (!log || log.length === 0) {
-      container.innerHTML = '<div class="log-empty"><div class="log-empty-icon">⏳</div><div>No activity yet</div></div>';
+      container.innerHTML = '<div class="log-empty"><div class="log-empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div>No activity yet</div></div>';
       return;
     }
 
     let html = '';
     log.forEach(entry => {
-      const icon = patternIcons[entry.pattern] || '🔘';
+      const icon = patternIcons[entry.pattern] || '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
       const name = displayNames[entry.pattern] || entry.pattern;
       html += '<div class="log-entry">';
       html += '<span class="log-time">' + entry.time + '</span>';
@@ -1553,7 +1878,67 @@ export class SettingsPanel {
       updatePresetHighlight(msg.settings.clickInterval);
       updateStatusUI();
     }
+    if (msg.type === 'proxyStatus') {
+      updateProxyUI(msg.status, msg.apiKey);
+    }
   });
+
+  // ===== PROXY =====
+  document.getElementById('proxyToggleBtn').addEventListener('click', () => {
+    const dot = document.getElementById('proxyDot');
+    const isRunning = dot.classList.contains('on');
+    vscode.postMessage({ type: isRunning ? 'proxyStop' : 'proxyStart' });
+  });
+
+  document.getElementById('proxySaveBtn').addEventListener('click', () => {
+    vscode.postMessage({
+      type: 'proxySaveConfig',
+      data: {
+        port: parseInt(document.getElementById('proxyPort').value),
+        requestTimeout: parseInt(document.getElementById('proxyTimeout').value),
+        allowLan: document.getElementById('proxyLan').checked,
+        autoStart: document.getElementById('proxyAutoStart').checked,
+        authMode: document.getElementById('proxyAuthMode').value,
+      }
+    });
+  });
+
+  document.getElementById('copyKeyBtn').addEventListener('click', () => {
+    const key = document.getElementById('proxyKeyDisplay').textContent;
+    vscode.postMessage({ type: 'copyToClipboard', text: key });
+  });
+
+  document.getElementById('regenKeyBtn').addEventListener('click', () => {
+    vscode.postMessage({ type: 'proxyRegenKey' });
+  });
+
+  function updateProxyUI(status, apiKey) {
+    const dot = document.getElementById('proxyDot');
+    const text = document.getElementById('proxyStatusText');
+    const btn = document.getElementById('proxyToggleBtn');
+    
+    if (status.running) {
+      dot.className = 'status-dot on';
+      text.textContent = 'Running on port ' + status.port;
+      text.style.color = 'var(--success)';
+      btn.textContent = 'Stop';
+      btn.className = 'btn btn-danger';
+    } else {
+      dot.className = 'status-dot off';
+      text.textContent = 'Stopped';
+      text.style.color = 'var(--text-muted)';
+      btn.textContent = 'Start';
+      btn.className = 'btn btn-primary';
+    }
+
+    if (apiKey) {
+      document.getElementById('proxyKeyDisplay').textContent = apiKey;
+      document.querySelectorAll('.proxy-key-val').forEach(el => el.textContent = apiKey);
+    }
+    if (status.port) {
+      document.querySelectorAll('.proxy-port-val').forEach(el => el.textContent = status.port);
+    }
+  }
 </script>
 </body>
 </html>`;

@@ -1,8 +1,8 @@
 {
   "name": "auto-accept-scroll",
   "displayName": "AG Auto Click & Scroll",
-  "description": "Auto-click Run/Allow/Accept buttons & auto-scroll chat for Antigravity. Smart Accept v8.0 — premium dashboard, speed profiles, activity log.",
-  "version": "8.0.0",
+  "description": "Auto-click Run/Allow/Accept buttons & auto-scroll chat for Antigravity. Smart Accept v9.0 — premium dashboard, speed profiles, activity log, API Proxy.",
+  "version": "9.0.0",
   "publisher": "nemark",
   "engines": {
     "vscode": "^1.80.0"
@@ -58,6 +58,10 @@
       {
         "command": "autoAccept.toggleAll",
         "title": "Auto Accept: Toggle All ON/OFF"
+      },
+      {
+        "command": "autoAccept.proxyToggle",
+        "title": "Auto Accept: Toggle API Proxy"
       }
     ],
     "keybindings": [
@@ -120,6 +124,37 @@
           "type": "boolean",
           "default": true,
           "description": "Tự nhấn Keep Waiting trong native Windows dialog"
+        },
+        "autoAccept.proxyPort": {
+          "type": "number",
+          "default": 8045,
+          "description": "Cổng TCP cho API Proxy cục bộ"
+        },
+        "autoAccept.proxyAutoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Tự động khởi chạy API Proxy khi extension khởi động"
+        },
+        "autoAccept.proxyTimeout": {
+          "type": "number",
+          "default": 120,
+          "description": "Timeout (giây) cho request proxy"
+        },
+        "autoAccept.proxyAllowLan": {
+          "type": "boolean",
+          "default": false,
+          "description": "Cho phép truy cập LAN (bind 0.0.0.0)"
+        },
+        "autoAccept.proxyAuthMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "off",
+            "all",
+            "allExceptHealth",
+            "auto"
+          ],
+          "description": "Chế độ xác thực API Proxy"
         }
       }
     }

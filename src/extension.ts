@@ -5,19 +5,22 @@ import { HttpServer } from './httpServer';
 import { Injector } from './injector';
 import { ChecksumFixer } from './checksumFixer';
 import { NativeDialogClicker } from './nativeDialog';
+import { ProxyServer } from './proxyServer';
+import { ProxyAuth } from './proxyAuth';
 
 // ============================================================
-// AG Auto Click & Scroll v8.0
+// AG Auto Click & Scroll v9.0
 // Entry point — Wires all modules together
 // ============================================================
 
-const EXTENSION_VERSION = '8.0.0';
+const EXTENSION_VERSION = '9.0.0';
 
 let statusBar: StatusBar;
 let settingsPanel: SettingsPanel;
 let httpServer: HttpServer;
 let injector: Injector;
 let nativeDialog: NativeDialogClicker;
+let proxyServer: ProxyServer;
 let commandsScanInterval: NodeJS.Timeout | null = null;
 
 // Antigravity internal commands for Commands API
@@ -151,7 +154,7 @@ function stopCommandsLoop(): void {
  * Activation — called when extension starts (onStartupFinished)
  */
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('[AG Auto Click & Scroll] Activating v8.0...');
+    console.log('[AG Auto Click & Scroll] Activating v9.0...');
 
     const config = vscode.workspace.getConfiguration('autoAccept');
 
@@ -313,6 +316,20 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                 });
             }
+        }),
+
+        vscode.commands.registerCommand('autoAccept.proxyToggle', () => {
+            if (proxyServer.isRunning()) {
+                proxyServer.stop();
+            } else {
+                proxyServer.start().catch((e: any) => {
+                    vscode.window.showErrorMessage('Proxy start failed: ' + e.message);
+                });
+            }
+            settingsPanel.updateProxyStatus(
+                proxyServer.getStatus(),
+                proxyServer.getAuth().getApiKey()
+            );
         })
     );
 
@@ -366,7 +383,93 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // ==========================
-    // 9. Config Change Listener
+    // 9. API Proxy Server
+    // ==========================
+    proxyServer = new ProxyServer();
+
+    // Load proxy config from settings
+    const proxyConfig: any = {};
+    const proxyPort = config.get<number>('proxyPort', 8045);
+    const proxyAutoStart = config.get<boolean>('proxyAutoStart', false);
+    const proxyTimeout = config.get<number>('proxyTimeout', 120);
+    const proxyAllowLan = config.get<boolean>('proxyAllowLan', false);
+    const proxyAuthMode = config.get<string>('proxyAuthMode', 'auto');
+
+    // Restore or generate API key
+    let savedProxyKey = context.globalState.get<string>('proxyApiKey', '');
+    if (!savedProxyKey) {
+        savedProxyKey = ProxyAuth.generateApiKey();
+        context.globalState.update('proxyApiKey', savedProxyKey);
+    }
+
+    proxyServer.configure({
+        port: proxyPort,
+        autoStart: proxyAutoStart,
+        requestTimeout: proxyTimeout,
+        allowLan: proxyAllowLan,
+        authMode: proxyAuthMode as any,
+        apiKey: savedProxyKey,
+    });
+
+    // Proxy status updates → settings panel
+    proxyServer.onStatus((status) => {
+        settingsPanel.updateProxyStatus(status, proxyServer.getAuth().getApiKey());
+    });
+
+    // Proxy action handler from settings panel
+    settingsPanel.onProxy(async (action, data) => {
+        switch (action) {
+            case 'proxyStart':
+                try {
+                    await proxyServer.start();
+                    vscode.window.showInformationMessage(`API Proxy started on port ${proxyServer.getStatus().port}`);
+                } catch (e: any) {
+                    vscode.window.showErrorMessage('Proxy start failed: ' + e.message);
+                }
+                settingsPanel.updateProxyStatus(proxyServer.getStatus(), proxyServer.getAuth().getApiKey());
+                break;
+            case 'proxyStop':
+                proxyServer.stop();
+                vscode.window.showInformationMessage('API Proxy stopped');
+                settingsPanel.updateProxyStatus(proxyServer.getStatus(), proxyServer.getAuth().getApiKey());
+                break;
+            case 'proxySaveConfig':
+                if (data) {
+                    const cfg = vscode.workspace.getConfiguration('autoAccept');
+                    if (data.port) cfg.update('proxyPort', data.port, vscode.ConfigurationTarget.Global);
+                    if (data.requestTimeout) cfg.update('proxyTimeout', data.requestTimeout, vscode.ConfigurationTarget.Global);
+                    if (data.allowLan !== undefined) cfg.update('proxyAllowLan', data.allowLan, vscode.ConfigurationTarget.Global);
+                    if (data.autoStart !== undefined) cfg.update('proxyAutoStart', data.autoStart, vscode.ConfigurationTarget.Global);
+                    if (data.authMode) cfg.update('proxyAuthMode', data.authMode, vscode.ConfigurationTarget.Global);
+                    proxyServer.configure(data);
+                    vscode.window.showInformationMessage('Proxy config saved. Restart proxy to apply port/LAN changes.');
+                }
+                break;
+            case 'proxyRegenKey': {
+                const newKey = ProxyAuth.generateApiKey();
+                context.globalState.update('proxyApiKey', newKey);
+                proxyServer.configure({ apiKey: newKey });
+                settingsPanel.updateProxyStatus(proxyServer.getStatus(), newKey);
+                vscode.window.showInformationMessage('New proxy API key generated');
+                break;
+            }
+        }
+    });
+
+    // Auto-start proxy if configured
+    if (proxyAutoStart) {
+        proxyServer.start().then(() => {
+            console.log('[AG Auto] API Proxy auto-started on port ' + proxyServer.getStatus().port);
+        }).catch((e: any) => {
+            console.error('[AG Auto] Proxy auto-start failed:', e.message);
+        });
+    }
+
+    // Send initial proxy status to panel
+    settingsPanel.updateProxyStatus(proxyServer.getStatus(), savedProxyKey);
+
+    // ==========================
+    // 10. Config Change Listener
     // ==========================
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
@@ -390,7 +493,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // ==========================
-    // 10. Cleanup
+    // 11. Cleanup
     // ==========================
     context.subscriptions.push({
         dispose: () => {
@@ -398,12 +501,13 @@ export async function activate(context: vscode.ExtensionContext) {
             settingsPanel.dispose();
             httpServer.stop();
             nativeDialog.stop();
+            proxyServer.stop();
             stopCommandsLoop();
             clearInterval(statsPersistInterval);
         },
     });
 
-    console.log('[AG Auto Click & Scroll] Activated v8.0 ✅');
+    console.log('[AG Auto Click & Scroll] Activated v9.0 ✅');
 }
 
 /**
@@ -448,5 +552,6 @@ export function deactivate() {
     settingsPanel?.dispose();
     httpServer?.stop();
     nativeDialog?.stop();
+    proxyServer?.stop();
     stopCommandsLoop();
 }
